@@ -111,33 +111,35 @@ def get_savefrom_links(url: str) -> dict:
         Dictionary with video metadata and download links
     """
     try:
-        # Encode URL for savefrom.net API
-        api_url = 'https://savefrom.net/api/info'
-        
-        # Use the alternative API endpoint
-        encoded_url = base64.b64encode(url.encode()).decode()
-        
-        params = {
-            'url': url,
-            'hq': 1,  # High quality
-        }
+        # Try savefrom.net REST API
+        api_url = 'https://en1.savefrom.net/1/api.php'
         
         headers = {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
         }
         
-        response = requests.get(
+        # Method 1: Try the official API
+        params = {
+            'url': url,
+            'hq': 'yes',
+        }
+        
+        response = requests.post(
             api_url,
-            params=params,
+            data=params,
             headers=headers,
-            timeout=30
+            timeout=15
         )
         
-        if response.status_code == 200:
-            data = response.json()
-            return {'success': True, 'data': data}
-        else:
-            return {'success': False, 'error': f'API returned status {response.status_code}'}
+        if response.status_code == 200 and response.text:
+            try:
+                data = response.json()
+                return {'success': True, 'data': data}
+            except:
+                # Not JSON, might be HTML or other format
+                return {'success': False, 'error': 'Invalid response format'}
+        
+        return {'success': False, 'error': 'API unavailable'}
             
     except Exception as e:
         return {'success': False, 'error': str(e)}
@@ -145,29 +147,32 @@ def get_savefrom_links(url: str) -> dict:
 
 def extract_youtube_info_from_savefrom(url: str) -> dict:
     """
-    Extract YouTube video info using savefrom.net as fallback.
-    Returns basic info from the savefrom.net response.
+    Try to extract YouTube video info using alternative methods.
     """
     try:
-        savefrom_result = get_savefrom_links(url)
+        # For YouTube URLs, try extracting basic info from the URL itself
+        if 'youtube.com' in url or 'youtu.be' in url:
+            # Extract video ID
+            video_id = None
+            if 'v=' in url:
+                video_id = url.split('v=')[1].split('&')[0]
+            elif 'youtu.be/' in url:
+                video_id = url.split('youtu.be/')[1].split('?')[0]
+            
+            if video_id:
+                # Return basic info with note that user needs to use external service
+                return {
+                    'title': 'YouTube Video',
+                    'id': video_id,
+                    'webpage_url': url,
+                    'fallback': True,
+                    'message': 'Use SaveFrom.net directly for download'
+                }
         
-        if not savefrom_result['success']:
-            return None
-        
-        data = savefrom_result['data']
-        
-        # Extract title and other info from response
-        return {
-            'title': data.get('title', 'Unknown'),
-            'id': data.get('id', url.split('=')[-1] if '=' in url else 'unknown'),
-            'duration': data.get('duration'),
-            'thumbnail': data.get('thumbnail'),
-            'webpage_url': url,
-            'download_links': data.get('formats', []),
-        }
+        return None
         
     except Exception as e:
-        print(f"Error extracting info from savefrom: {e}")
+        print(f"Error extracting info: {e}")
         return None
 
 
@@ -528,32 +533,32 @@ def analyze_video():
     except Exception as e:
         error_str = str(e)
         
-        # If YouTube fails, try savefrom.net API as fallback
-        if 'youtube' in url.lower():
-            print(f"yt-dlp failed for YouTube: {error_str}. Trying savefrom.net...")
+        # If YouTube fails, provide helpful fallback
+        if 'youtube' in url.lower() and ('bot' in error_str.lower() or 'sign in' in error_str.lower()):
+            # Extract video ID for savefrom.net link
+            video_id = None
+            if 'v=' in url:
+                video_id = url.split('v=')[1].split('&')[0]
+            elif 'youtu.be/' in url:
+                video_id = url.split('youtu.be/')[1].split('?')[0]
             
-            savefrom_info = extract_youtube_info_from_savefrom(url)
-            if savefrom_info:
-                return jsonify({
-                    'platform': 'YouTube (via SaveFrom)',
-                    'title': savefrom_info.get('title', 'Unknown'),
-                    'thumbnail': savefrom_info.get('thumbnail'),
-                    'duration': savefrom_info.get('duration'),
-                    'webpage_url': url,
-                    'id': savefrom_info.get('id'),
-                    'note': 'Using SaveFrom.net API for analysis'
-                })
+            savefrom_url = f'https://en1.savefrom.net/1/?url=https://www.youtube.com/watch?v={video_id}' if video_id else 'https://en1.savefrom.net/'
+            
+            error_msg = (
+                f'YouTube is blocking automated access from this server. '
+                f'Use SaveFrom.net directly: {savefrom_url} '
+                f'Or try the simple method: Add "ss" to your URL: https://ssyoutube.com/watch?v={video_id}'
+            )
+            
+            return jsonify({
+                'error': error_msg,
+                'platform': 'YouTube',
+                'fallback_service': 'SaveFrom.net',
+                'fallback_url': savefrom_url,
+                'alternative_url': f'https://ssyoutube.com/watch?v={video_id}' if video_id else None,
+            }), 400
         
-        # Check if it's a bot detection error
-        if 'Sign in to confirm you\'re not a bot' in error_str or 'bot' in error_str.lower():
-            error_msg = ('YouTube is blocking requests from this server (bot detection). '
-                        'Your cookies may have expired. Please try: '
-                        '1) Export fresh cookies from youtube.com using the extension '
-                        '2) Paste them in the "🔐 YouTube Authentication" section above. '
-                        'Alternative: Try again in a few minutes.')
-        else:
-            error_msg = error_str
-        return jsonify({'error': f'Failed to analyze URL: {error_msg}', 'platform': 'Unknown'}), 400
+        return jsonify({'error': f'Failed to analyze URL: {error_str}', 'platform': 'Unknown'}), 400
 
 
 @app.route('/api/progress')
