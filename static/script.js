@@ -24,6 +24,9 @@ const progressLabel = document.getElementById('progressLabel');
 const progressFill = document.getElementById('progressFill');
 const progressPercent = document.getElementById('progressPercent');
 const progressEta = document.getElementById('progressEta');
+const cookiesInput = document.getElementById('cookiesInput');
+const setCookiesBtn = document.getElementById('setCookiesBtn');
+const cookiesStatus = document.getElementById('cookiesStatus');
 
 let currentVideoData = null;
 let downloadPollInterval = null;
@@ -391,6 +394,45 @@ async function copyInfo() {
     }
 }
 
+async function setCookies() {
+    const cookieText = cookiesInput.value.trim();
+    
+    if (!cookieText) {
+        flashCookiesStatus('Please paste cookies JSON.', 'error');
+        return;
+    }
+    
+    try {
+        const cookies = JSON.parse(cookieText);
+        if (!Array.isArray(cookies)) {
+            throw new Error('Cookies must be a JSON array');
+        }
+        
+        const response = await fetch('/api/cookies', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ cookies }),
+        });
+        
+        if (!response.ok) {
+            throw new Error(`Failed to save cookies: ${response.statusText}`);
+        }
+        
+        cookiesInput.value = '';
+        flashCookiesStatus('Cookies saved successfully! Try analyzing videos again.', 'success');
+    } catch (error) {
+        flashCookiesStatus(`Error: ${error.message}`, 'error');
+    }
+}
+
+function flashCookiesStatus(message, type = 'success') {
+    cookiesStatus.textContent = message;
+    cookiesStatus.style.color = type === 'error' ? 'var(--danger)' : 'var(--success)';
+    setTimeout(() => {
+        cookiesStatus.textContent = '';
+    }, 5000);
+}
+
 analyzeBtn.addEventListener('click', analyzeUrl);
 videoUrl.addEventListener('keydown', (event) => {
     if (event.key === 'Enter') analyzeUrl();
@@ -400,6 +442,7 @@ downloadVideoBtn.addEventListener('click', () => startNamedDownload('video'));
 downloadAudioBtn.addEventListener('click', () => startNamedDownload('audio'));
 cancelDownloadBtn.addEventListener('click', cancelDownload);
 copyInfoBtn.addEventListener('click', copyInfo);
+setCookiesBtn.addEventListener('click', setCookies);
 thumbnailImage.addEventListener('click', openPreviewOrSource);
 closePreviewBtn.addEventListener('click', closePreview);
 

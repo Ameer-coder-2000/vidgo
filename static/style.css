@@ -260,6 +260,76 @@ body::before {
     box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.12);
 }
 
+.cookies-card {
+    margin-bottom: 1.5rem;
+}
+
+.cookies-card details {
+    cursor: pointer;
+}
+
+.cookies-card summary {
+    font-weight: 600;
+    padding: 0.75rem 0;
+    color: var(--text);
+    user-select: none;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.cookies-card summary:hover {
+    color: var(--primary);
+}
+
+.cookies-content {
+    margin-top: 1rem;
+    padding-top: 1rem;
+    border-top: 1px solid var(--border);
+}
+
+.cookies-content p {
+    color: var(--muted);
+    font-size: 0.9rem;
+    line-height: 1.5;
+    margin: 0 0 1rem 0;
+}
+
+.cookies-content textarea {
+    width: 100%;
+    padding: 0.75rem;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: var(--surface-muted);
+    color: var(--text);
+    font-family: 'Monaco', 'Courier New', monospace;
+    font-size: 0.85rem;
+    resize: vertical;
+    transition: all 0.2s ease;
+}
+
+.cookies-content textarea:focus {
+    outline: none;
+    border-color: var(--primary);
+    background: var(--surface);
+    box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.12);
+}
+
+.help-text {
+    margin-top: 0.75rem;
+    color: var(--muted);
+    font-size: 0.85rem;
+}
+
+.help-text a {
+    color: var(--primary);
+    text-decoration: none;
+}
+
+.help-text a:hover {
+    text-decoration: underline;
+}
+
 .input-note {
     margin: 0;
     color: var(--muted);

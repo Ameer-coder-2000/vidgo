@@ -14,23 +14,6 @@ app = Flask(__name__, static_folder='static', template_folder='templates')
 download_state_lock = threading.Lock()
 
 
-def load_cookies():
-    """Load YouTube cookies from file if available."""
-    cookie_paths = [
-        'youtube_cookies.json',
-        '/app/youtube_cookies.json',
-        os.path.expanduser('~/.config/youtube_cookies.json'),
-    ]
-    for path in cookie_paths:
-        if os.path.exists(path):
-            try:
-                with open(path, 'r') as f:
-                    return json.load(f)
-            except Exception:
-                pass
-    return None
-
-
 def get_ydl_opts_base(skip_download=True):
     """Get base yt-dlp options with better YouTube support."""
     opts = {
@@ -50,14 +33,20 @@ def get_ydl_opts_base(skip_download=True):
                 'player_skip': ['js', 'configs'],
             }
         },
+        'cookiesfrombrowser': ('chrome', 'firefox', 'chromium', 'opera', 'edge'),
     }
     
-    # Add cookies if available
-    cookies = load_cookies()
-    if cookies:
-        opts['cookies'] = cookies
+    # Add stored cookies if available
+    global stored_cookies
+    if stored_cookies:
+        opts['cookies'] = stored_cookies
     
     return opts
+
+
+# Global storage for cookies
+stored_cookies = None
+cookies_lock = threading.Lock()
 
 
 def _idle_download_state():
@@ -327,6 +316,31 @@ def run_download_job(url: str, mode: str) -> None:
 def index():
     """Render the frontend page."""
     return render_template('index.html')
+
+
+@app.route('/api/cookies', methods=['POST'])
+def set_cookies():
+    """Store YouTube cookies for authentication."""
+    global stored_cookies
+    data = request.get_json() or {}
+    cookies = data.get('cookies')
+    
+    if not cookies:
+        return jsonify({'error': 'No cookies provided.'}), 400
+    
+    with cookies_lock:
+        stored_cookies = cookies
+    
+    return jsonify({'status': 'success', 'message': 'Cookies updated successfully.'}), 200
+
+
+@app.route('/api/cookies', methods=['GET'])
+def get_cookies_status():
+    """Check if cookies are configured."""
+    global stored_cookies
+    with cookies_lock:
+        has_cookies = stored_cookies is not None
+    return jsonify({'has_cookies': has_cookies}), 200
 
 
 @app.route('/api/analyze', methods=['POST'])
