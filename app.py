@@ -52,6 +52,32 @@ stored_cookies = None
 cookies_lock = threading.Lock()
 
 
+# Load cookies from file on startup
+def _load_cookies_from_file():
+    """Try to load cookies from youtube_cookies.json file."""
+    global stored_cookies
+    cookie_paths = [
+        'youtube_cookies.json',
+        os.path.join(os.path.dirname(__file__), 'youtube_cookies.json'),
+    ]
+    for path in cookie_paths:
+        if os.path.exists(path):
+            try:
+                with open(path, 'r') as f:
+                    cookies_data = json.load(f)
+                    if isinstance(cookies_data, list):
+                        stored_cookies = cookies_data
+                        print(f"✓ Loaded {len(stored_cookies)} YouTube cookies from {path}")
+                        return
+            except Exception as e:
+                print(f"Warning: Could not load cookies from {path}: {e}")
+    print("No youtube_cookies.json file found - cookies authentication will need to be added manually")
+
+
+# Load cookies on app startup
+_load_cookies_from_file()
+
+
 def _idle_download_state():
     return {
         'status': 'idle',
