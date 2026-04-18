@@ -5,12 +5,59 @@ import tempfile
 import threading
 import time
 from typing import Optional
+import json
 
 from yt_dlp import YoutubeDL
 
 app = Flask(__name__, static_folder='static', template_folder='templates')
 
 download_state_lock = threading.Lock()
+
+
+def load_cookies():
+    """Load YouTube cookies from file if available."""
+    cookie_paths = [
+        'youtube_cookies.json',
+        '/app/youtube_cookies.json',
+        os.path.expanduser('~/.config/youtube_cookies.json'),
+    ]
+    for path in cookie_paths:
+        if os.path.exists(path):
+            try:
+                with open(path, 'r') as f:
+                    return json.load(f)
+            except Exception:
+                pass
+    return None
+
+
+def get_ydl_opts_base(skip_download=True):
+    """Get base yt-dlp options with better YouTube support."""
+    opts = {
+        'quiet': True,
+        'skip_download': skip_download,
+        'nocheckcertificate': True,
+        'socket_timeout': 120 if skip_download else 300,
+        'retries': 5,
+        'no_warnings': True,
+        'http_headers': {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Accept-Language': 'en-US,en;q=0.9',
+        },
+        'extractor_args': {
+            'youtube': {
+                'player_client': ['web', 'android'],
+                'player_skip': ['js', 'configs'],
+            }
+        },
+    }
+    
+    # Add cookies if available
+    cookies = load_cookies()
+    if cookies:
+        opts['cookies'] = cookies
+    
+    return opts
 
 
 def _idle_download_state():
@@ -214,25 +261,10 @@ def run_download_job(url: str, mode: str) -> None:
     if cancel_requested:
         raise DownloadCancelled('Download canceled by user.')
 
-    ydl_opts = {
-        'format': get_download_format_selector(mode),
-        'outtmpl': os.path.join(tmp_dir, '%(title)s.%(ext)s'),
-        'progress_hooks': [progress_hook],
-        'quiet': True,
-        'nocheckcertificate': True,
-        'socket_timeout': 300,
-        'retries': 5,
-        'no_warnings': True,
-        'http_headers': {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
-        },
-        'extractor_args': {
-            'youtube': {
-                'player_client': ['web'],
-                'player_skip': ['js', 'configs'],
-            }
-        },
-    }
+    ydl_opts = get_ydl_opts_base(skip_download=False)
+    ydl_opts['format'] = get_download_format_selector(mode)
+    ydl_opts['outtmpl'] = os.path.join(tmp_dir, '%(title)s.%(ext)s')
+    ydl_opts['progress_hooks'] = [progress_hook]
 
     try:
         with YoutubeDL(ydl_opts) as ydl:
@@ -306,23 +338,7 @@ def analyze_video():
     if not url:
         return jsonify({'error': 'Please provide a video URL.'}), 400
 
-    ydl_opts = {
-        'quiet': True,
-        'skip_download': True,
-        'nocheckcertificate': True,
-        'socket_timeout': 120,
-        'retries': 5,
-        'no_warnings': True,
-        'http_headers': {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
-        },
-        'extractor_args': {
-            'youtube': {
-                'player_client': ['web'],
-                'player_skip': ['js', 'configs'],
-            }
-        },
-    }
+    ydl_opts = get_ydl_opts_base(skip_download=True)
 
     try:
         with YoutubeDL(ydl_opts) as ydl:
