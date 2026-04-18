@@ -66,8 +66,25 @@ def _load_cookies_from_file():
                 with open(path, 'r') as f:
                     cookies_data = json.load(f)
                     if isinstance(cookies_data, list):
-                        stored_cookies = cookies_data
-                        print(f"✓ Loaded {len(stored_cookies)} YouTube cookies from {path}")
+                        # Clean cookies to only include fields yt-dlp needs
+                        cleaned_cookies = []
+                        for cookie in cookies_data:
+                            cleaned = {
+                                'domain': cookie.get('domain', '.youtube.com'),
+                                'name': cookie.get('name', ''),
+                                'value': cookie.get('value', ''),
+                            }
+                            # Add optional but useful fields
+                            if 'path' in cookie:
+                                cleaned['path'] = cookie['path']
+                            if 'secure' in cookie:
+                                cleaned['secure'] = cookie['secure']
+                            if 'httpOnly' in cookie:
+                                cleaned['httpOnly'] = cookie['httpOnly']
+                            cleaned_cookies.append(cleaned)
+                        
+                        stored_cookies = cleaned_cookies
+                        print(f"✓ Loaded and cleaned {len(stored_cookies)} YouTube cookies from {path}")
                         return
             except Exception as e:
                 print(f"Warning: Could not load cookies from {path}: {e}")
@@ -357,10 +374,38 @@ def set_cookies():
     if not cookies:
         return jsonify({'error': 'No cookies provided.'}), 400
     
-    with cookies_lock:
-        stored_cookies = cookies
-    
-    return jsonify({'status': 'success', 'message': 'Cookies updated successfully.'}), 200
+    try:
+        if isinstance(cookies, str):
+            cookies = json.loads(cookies)
+        
+        if not isinstance(cookies, list):
+            return jsonify({'error': 'Cookies must be a JSON array'}), 400
+        
+        # Clean cookies to only include fields yt-dlp needs
+        cleaned_cookies = []
+        for cookie in cookies:
+            cleaned = {
+                'domain': cookie.get('domain', '.youtube.com'),
+                'name': cookie.get('name', ''),
+                'value': cookie.get('value', ''),
+            }
+            # Add optional but useful fields
+            if 'path' in cookie:
+                cleaned['path'] = cookie['path']
+            if 'secure' in cookie:
+                cleaned['secure'] = cookie['secure']
+            if 'httpOnly' in cookie:
+                cleaned['httpOnly'] = cookie['httpOnly']
+            cleaned_cookies.append(cleaned)
+        
+        with cookies_lock:
+            stored_cookies = cleaned_cookies
+        
+        return jsonify({'status': 'success', 'message': f'Successfully saved {len(cleaned_cookies)} cookies!'}), 200
+    except json.JSONDecodeError:
+        return jsonify({'error': 'Invalid JSON format'}), 400
+    except Exception as e:
+        return jsonify({'error': f'Error processing cookies: {str(e)}'}), 400
 
 
 @app.route('/api/cookies', methods=['GET'])
