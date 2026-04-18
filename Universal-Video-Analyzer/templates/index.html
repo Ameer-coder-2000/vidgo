@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Universal Video Downloader</title>
+    <link rel="stylesheet" href="/static/style.css" />
+</head>
+<body>
+    <div class="app-shell">
+        <header class="topbar">
+            <button id="darkModeToggle" class="toggle-btn" type="button" aria-label="Toggle dark mode">Dark Mode</button>
+            <div class="brand-block">
+                <div class="brand-mark">UVD</div>
+                <div class="brand-copy">
+                    <h1>Universal Video Downloader</h1>
+                    <p class="topbar-copy">
+                        Analyze video links with a clean preview and controlled downloads.
+                    </p>
+                </div>
+            </div>
+        </header>
+
+        <main class="workspace">
+            <section class="card input-card">
+                <div class="section-heading">
+                    <div>
+                        <p class="section-kicker">Step 1</p>
+                        <h2>Paste a video URL</h2>
+                        <p class="section-copy">Analyze a supported link to fetch metadata and prepare a video or audio download.</p>
+                    </div>
+                </div>
+
+                <div class="url-entry">
+                    <label for="videoUrl">Video URL</label>
+                    <input type="text" id="videoUrl" placeholder="https://youtu.be/..." />
+                    <p class="input-note">Supports YouTube, Instagram, Facebook, TikTok, and similar pages.</p>
+                </div>
+
+                <div class="actions primary-actions">
+                    <button id="analyzeBtn" class="primary-btn" type="button">Analyze</button>
+                    <span id="statusText" class="status-text"></span>
+                </div>
+                <div id="loader" class="loader hidden"></div>
+            </section>
+
+            <section id="resultSection" class="card hidden result-card">
+                <div class="section-heading result-heading">
+                    <div>
+                        <p class="section-kicker">Step 2</p>
+                        <h2 id="videoTitle">Video Title</h2>
+                        <p class="section-copy">Preview the source, then choose whether you want the video or the audio.</p>
+                    </div>
+                    <div class="result-badge">Ready</div>
+                </div>
+
+                <div class="video-preview-container hidden" id="videoPreviewContainer">
+                    <div class="video-preview-header">
+                        <h3>Video Preview</h3>
+                        <button id="closePreviewBtn" class="close-btn" type="button" aria-label="Close preview">&times;</button>
+                    </div>
+                    <video id="videoPreview" controls playsinline preload="metadata">
+                        Your browser does not support the video tag.
+                    </video>
+                </div>
+
+                <div class="result-grid">
+                    <div class="preview-column">
+                        <div class="preview-image">
+                            <img id="thumbnailImage" src="" alt="Video thumbnail" title="Click to preview" />
+                        </div>
+                    </div>
+
+                    <div class="details-column">
+                        <div class="meta-grid">
+                            <div class="meta-item">
+                                <span>Platform</span>
+                                <strong id="platformInfo"></strong>
+                            </div>
+                            <div class="meta-item">
+                                <span>Duration</span>
+                                <strong id="durationInfo"></strong>
+                            </div>
+                            <div class="meta-item">
+                                <span>Uploader</span>
+                                <strong id="uploaderInfo"></strong>
+                            </div>
+                        </div>
+
+                        <div class="preview-buttons">
+                            <button id="copyInfoBtn" class="secondary-btn" type="button">Copy Info</button>
+                            <button id="viewVideoBtn" class="secondary-btn" type="button">View Video</button>
+                        </div>
+
+                        <div class="download-choice">
+                            <button id="downloadVideoBtn" class="primary-btn" type="button">Download Video</button>
+                            <button id="downloadAudioBtn" class="secondary-btn" type="button">Download Audio</button>
+                        </div>
+
+                        <div class="download-progress hidden" id="downloadProgress">
+                            <div class="progress-label" id="progressLabel">Downloading...</div>
+                            <div class="progress-bar">
+                                <div class="progress-fill" id="progressFill"></div>
+                            </div>
+                            <div class="progress-meta">
+                                <span id="progressPercent">0%</span>
+                                <span id="progressEta">ETA: --:--</span>
+                            </div>
+                            <button id="cancelDownloadBtn" class="cancel-btn" type="button">Cancel Download</button>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <section id="errorCard" class="card error-card hidden">
+                <p id="errorMessage"></p>
+            </section>
+        </main>
+
+        <footer class="footer">
+            <p>Designed &amp; Developed by Ameer Abdelkareem Osman &copy; 2026 All rights reserved</p>
+        </footer>
+    </div>
+    <script src="/static/script.js"></script>
+</body>
+</html>
