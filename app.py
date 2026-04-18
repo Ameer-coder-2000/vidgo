@@ -349,8 +349,13 @@ def progress_hook(d: dict) -> None:
 def get_download_format_selector(mode: str) -> str:
     """Choose the yt-dlp format selector for the requested download mode."""
     if mode == 'audio':
-        # Download best audio, with fallback to video+audio then extract audio
-        return 'bestaudio[ext=m4a]/bestaudio[ext=webm]/bestaudio/best'
+        # Try to get audio-only formats first
+        # If FFmpeg is available, we can extract audio from video+audio formats too
+        if ffmpeg_available():
+            return 'bestaudio[ext=m4a]/bestaudio[ext=webm]/bestaudio/best'
+        else:
+            # Without FFmpeg, just get best audio format (might be video file)
+            return 'bestaudio[ext=m4a]/bestaudio[ext=webm]/bestaudio/best'
     if ffmpeg_available():
         return 'bestvideo+bestaudio/best'
     return 'best'
@@ -358,7 +363,7 @@ def get_download_format_selector(mode: str) -> str:
 
 def get_postprocessors(mode: str) -> list:
     """Get postprocessors for the requested download mode."""
-    if mode == 'audio':
+    if mode == 'audio' and ffmpeg_available():
         return [
             {
                 'key': 'FFmpegExtractAudio',
