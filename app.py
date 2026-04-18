@@ -201,8 +201,46 @@ class DownloadCancelled(Exception):
 
 
 def ffmpeg_available() -> bool:
-    """Return True if ffmpeg is installed and available on PATH."""
-    return shutil.which('ffmpeg') is not None
+    """Return True if ffmpeg is installed and available on PATH or at known locations."""
+    # Check PATH first
+    if shutil.which('ffmpeg') is not None:
+        return True
+    
+    # Check known installation locations
+    known_paths = [
+        'C:\\ffmpeg\\bin\\ffmpeg.exe',
+        'C:\\Program Files\\ffmpeg\\bin\\ffmpeg.exe',
+        'C:\\Program Files (x86)\\ffmpeg\\bin\\ffmpeg.exe',
+        'd:\\ffmpeg-8.1-essentials_build\\bin\\ffmpeg.exe',  # Our installed location
+    ]
+    
+    for path in known_paths:
+        if os.path.exists(path):
+            return True
+    
+    return False
+
+
+def get_ffmpeg_location() -> Optional[str]:
+    """Return the path to ffmpeg if available."""
+    # Check PATH first
+    ffmpeg_in_path = shutil.which('ffmpeg')
+    if ffmpeg_in_path:
+        return ffmpeg_in_path
+    
+    # Check known installation locations
+    known_paths = [
+        'C:\\ffmpeg\\bin\\ffmpeg.exe',
+        'C:\\Program Files\\ffmpeg\\bin\\ffmpeg.exe',
+        'C:\\Program Files (x86)\\ffmpeg\\bin\\ffmpeg.exe',
+        'd:\\ffmpeg-8.1-essentials_build\\bin\\ffmpeg.exe',  # Our installed location
+    ]
+    
+    for path in known_paths:
+        if os.path.exists(path):
+            return path
+    
+    return None
 
 
 def get_format_type(item: dict) -> str:
@@ -401,6 +439,11 @@ def run_download_job(url: str, mode: str) -> None:
     ydl_opts['outtmpl'] = os.path.join(tmp_dir, '%(title)s.%(ext)s')
     ydl_opts['progress_hooks'] = [progress_hook]
     ydl_opts['postprocessors'] = get_postprocessors(mode)
+    
+    # Add ffmpeg location if available
+    ffmpeg_loc = get_ffmpeg_location()
+    if ffmpeg_loc:
+        ydl_opts['ffmpeg_location'] = ffmpeg_loc
 
     try:
         with YoutubeDL(ydl_opts) as ydl:
