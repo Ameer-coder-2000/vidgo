@@ -32,11 +32,14 @@ def get_ydl_opts_base(skip_download=True):
         },
         'extractor_args': {
             'youtube': {
-                'player_client': ['android', 'web'],
-                'player_skip': ['js', 'configs'],
+                'player_client': ['android', 'web', 'mweb'],
+                'player_skip': ['configs'],  # Don't skip configs, just use them
+                'lang': ['en'],
             }
         },
         'age_limit': 18,
+        'check_formats': False,  # Skip format checking to avoid extra requests
+        'no_post_overwrites': True,
     }
     
     # Add stored cookies if available - REQUIRED for bot detection bypass
@@ -414,7 +417,8 @@ def get_cookies_status():
     global stored_cookies
     with cookies_lock:
         has_cookies = stored_cookies is not None
-    return jsonify({'has_cookies': has_cookies}), 200
+        num_cookies = len(stored_cookies) if stored_cookies else 0
+    return jsonify({'has_cookies': has_cookies, 'cookie_count': num_cookies}), 200
 
 
 @app.route('/api/analyze', methods=['POST'])
@@ -435,8 +439,11 @@ def analyze_video():
         error_str = str(e)
         # Check if it's a bot detection error
         if 'Sign in to confirm you\'re not a bot' in error_str or 'bot' in error_str.lower():
-            error_msg = ('YouTube requires authentication. Please provide YouTube cookies in the authentication section above. '
-                        'Visit the app and click "🔐 YouTube Authentication" to add your cookies.')
+            error_msg = ('YouTube is blocking requests from this server (bot detection). '
+                        'Your cookies may have expired. Please try: '
+                        '1) Export fresh cookies from youtube.com using the extension '
+                        '2) Paste them in the "🔐 YouTube Authentication" section above. '
+                        'Alternative: Try again in a few minutes.')
         else:
             error_msg = error_str
         return jsonify({'error': f'Failed to analyze URL: {error_msg}', 'platform': 'Unknown'}), 400
