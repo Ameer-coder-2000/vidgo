@@ -1,7 +1,8 @@
 const videoUrl = document.getElementById('videoUrl');
 const analyzeBtn = document.getElementById('analyzeBtn');
 const viewVideoBtn = document.getElementById('viewVideoBtn');
-const downloadBtn = document.getElementById('downloadBtn');
+const downloadVideoBtn = document.getElementById('downloadVideoBtn');
+const downloadAudioBtn = document.getElementById('downloadAudioBtn');
 const copyInfoBtn = document.getElementById('copyInfoBtn');
 const cancelDownloadBtn = document.getElementById('cancelDownloadBtn');
 const darkModeToggle = document.getElementById('darkModeToggle');
@@ -64,9 +65,11 @@ function clearDownloadPolling() {
 function setDownloadControls(active, mode = null) {
     downloadInProgress = active;
     currentDownloadMode = active ? mode : null;
-    downloadBtn.disabled = active;
+    downloadVideoBtn.disabled = active;
+    downloadAudioBtn.disabled = active;
     cancelDownloadBtn.disabled = !active;
-    downloadBtn.textContent = active ? 'Downloading...' : 'Download';
+    downloadVideoBtn.textContent = active && mode === 'video' ? 'Downloading Video...' : 'Download Video';
+    downloadAudioBtn.textContent = active && mode === 'audio' ? 'Downloading Audio...' : 'Download Audio';
 }
 
 function showError(message, options = {}) {
@@ -435,7 +438,8 @@ videoUrl.addEventListener('keydown', (event) => {
     if (event.key === 'Enter') analyzeUrl();
 });
 viewVideoBtn.addEventListener('click', openPreviewOrSource);
-downloadBtn.addEventListener('click', () => startNamedDownload('video'));
+downloadVideoBtn.addEventListener('click', () => startNamedDownload('video'));
+downloadAudioBtn.addEventListener('click', () => startNamedDownload('audio'));
 cancelDownloadBtn.addEventListener('click', cancelDownload);
 copyInfoBtn.addEventListener('click', copyInfo);
 setCookiesBtn.addEventListener('click', setCookies);
