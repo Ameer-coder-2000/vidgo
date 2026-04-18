@@ -349,7 +349,8 @@ def progress_hook(d: dict) -> None:
 def get_download_format_selector(mode: str) -> str:
     """Choose the yt-dlp format selector for the requested download mode."""
     if mode == 'audio':
-        return 'bestaudio'
+        # Use bestaudio with fallbacks for videos that don't have separate audio tracks
+        return 'bestaudio*[ext=m4a]/bestaudio*[ext=webm]/bestaudio/best'
     if ffmpeg_available():
         return 'bestvideo+bestaudio/best'
     return 'best'
