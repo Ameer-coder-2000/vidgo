@@ -6,6 +6,7 @@ import threading
 import time
 from typing import Optional
 import json
+import requests
 
 from yt_dlp import YoutubeDL
 
@@ -96,6 +97,78 @@ def _load_cookies_from_file():
 
 # Load cookies on app startup
 _load_cookies_from_file()
+
+
+# SaveFrom.net API Integration
+def get_savefrom_links(url: str) -> dict:
+    """
+    Get download links from savefrom.net API.
+    
+    Args:
+        url: Video URL to download
+        
+    Returns:
+        Dictionary with video metadata and download links
+    """
+    try:
+        # Encode URL for savefrom.net API
+        api_url = 'https://savefrom.net/api/info'
+        
+        # Use the alternative API endpoint
+        encoded_url = base64.b64encode(url.encode()).decode()
+        
+        params = {
+            'url': url,
+            'hq': 1,  # High quality
+        }
+        
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+        }
+        
+        response = requests.get(
+            api_url,
+            params=params,
+            headers=headers,
+            timeout=30
+        )
+        
+        if response.status_code == 200:
+            data = response.json()
+            return {'success': True, 'data': data}
+        else:
+            return {'success': False, 'error': f'API returned status {response.status_code}'}
+            
+    except Exception as e:
+        return {'success': False, 'error': str(e)}
+
+
+def extract_youtube_info_from_savefrom(url: str) -> dict:
+    """
+    Extract YouTube video info using savefrom.net as fallback.
+    Returns basic info from the savefrom.net response.
+    """
+    try:
+        savefrom_result = get_savefrom_links(url)
+        
+        if not savefrom_result['success']:
+            return None
+        
+        data = savefrom_result['data']
+        
+        # Extract title and other info from response
+        return {
+            'title': data.get('title', 'Unknown'),
+            'id': data.get('id', url.split('=')[-1] if '=' in url else 'unknown'),
+            'duration': data.get('duration'),
+            'thumbnail': data.get('thumbnail'),
+            'webpage_url': url,
+            'download_links': data.get('formats', []),
+        }
+        
+    except Exception as e:
+        print(f"Error extracting info from savefrom: {e}")
+        return None
 
 
 def _idle_download_state():
@@ -430,13 +503,47 @@ def analyze_video():
     if not url:
         return jsonify({'error': 'Please provide a video URL.'}), 400
 
+    # First try yt-dlp for better format options
     ydl_opts = get_ydl_opts_base(skip_download=True)
 
     try:
         with YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(url, download=False)
+        
+        # Success with yt-dlp
+        extractor_key = info.get('extractor_key', 'Unknown')
+        platform = extractor_key.replace('_', ' ').title()
+
+        return jsonify({
+            'platform': platform,
+            'title': info.get('title', 'Unknown title'),
+            'thumbnail': info.get('thumbnail'),
+            'duration': info.get('duration'),
+            'uploader': info.get('uploader') or info.get('channel'),
+            'webpage_url': info.get('webpage_url'),
+            'playback_url': select_playback_url(info.get('formats') or []) or info.get('url'),
+            'id': info.get('id'),
+        })
+        
     except Exception as e:
         error_str = str(e)
+        
+        # If YouTube fails, try savefrom.net API as fallback
+        if 'youtube' in url.lower():
+            print(f"yt-dlp failed for YouTube: {error_str}. Trying savefrom.net...")
+            
+            savefrom_info = extract_youtube_info_from_savefrom(url)
+            if savefrom_info:
+                return jsonify({
+                    'platform': 'YouTube (via SaveFrom)',
+                    'title': savefrom_info.get('title', 'Unknown'),
+                    'thumbnail': savefrom_info.get('thumbnail'),
+                    'duration': savefrom_info.get('duration'),
+                    'webpage_url': url,
+                    'id': savefrom_info.get('id'),
+                    'note': 'Using SaveFrom.net API for analysis'
+                })
+        
         # Check if it's a bot detection error
         if 'Sign in to confirm you\'re not a bot' in error_str or 'bot' in error_str.lower():
             error_msg = ('YouTube is blocking requests from this server (bot detection). '
@@ -447,20 +554,6 @@ def analyze_video():
         else:
             error_msg = error_str
         return jsonify({'error': f'Failed to analyze URL: {error_msg}', 'platform': 'Unknown'}), 400
-
-    extractor_key = info.get('extractor_key', 'Unknown')
-    platform = extractor_key.replace('_', ' ').title()
-
-    return jsonify({
-        'platform': platform,
-        'title': info.get('title', 'Unknown title'),
-        'thumbnail': info.get('thumbnail'),
-        'duration': info.get('duration'),
-        'uploader': info.get('uploader') or info.get('channel'),
-        'webpage_url': info.get('webpage_url'),
-        'playback_url': select_playback_url(info.get('formats') or []) or info.get('url'),
-        'id': info.get('id'),
-    })
 
 
 @app.route('/api/progress')
@@ -529,6 +622,23 @@ def cancel_download():
         download_state['completed_at'] = None
 
     return jsonify({'status': 'cancelling', 'message': f'Canceling {mode} download...'})
+
+
+@app.route('/api/savefrom/links', methods=['POST'])
+def get_savefrom_download_links():
+    """Get direct download links from savefrom.net for any video platform."""
+    data = request.get_json() or {}
+    url = data.get('url', '').strip()
+    
+    if not url:
+        return jsonify({'error': 'Please provide a video URL.'}), 400
+    
+    result = get_savefrom_links(url)
+    
+    if result['success']:
+        return jsonify(result['data']), 200
+    else:
+        return jsonify({'error': result['error']}), 400
 
 
 @app.route('/api/download/file')
