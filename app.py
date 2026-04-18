@@ -349,11 +349,24 @@ def progress_hook(d: dict) -> None:
 def get_download_format_selector(mode: str) -> str:
     """Choose the yt-dlp format selector for the requested download mode."""
     if mode == 'audio':
-        # Use bestaudio with fallbacks for videos that don't have separate audio tracks
-        return 'bestaudio*[ext=m4a]/bestaudio*[ext=webm]/bestaudio/best'
+        # Download best audio, with fallback to video+audio then extract audio
+        return 'bestaudio[ext=m4a]/bestaudio[ext=webm]/bestaudio/best'
     if ffmpeg_available():
         return 'bestvideo+bestaudio/best'
     return 'best'
+
+
+def get_postprocessors(mode: str) -> list:
+    """Get postprocessors for the requested download mode."""
+    if mode == 'audio':
+        return [
+            {
+                'key': 'FFmpegExtractAudio',
+                'preferredcodec': 'best',
+                'preferredquality': '192',
+            }
+        ]
+    return []
 
 
 def run_download_job(url: str, mode: str) -> None:
@@ -382,6 +395,7 @@ def run_download_job(url: str, mode: str) -> None:
     ydl_opts['format'] = get_download_format_selector(mode)
     ydl_opts['outtmpl'] = os.path.join(tmp_dir, '%(title)s.%(ext)s')
     ydl_opts['progress_hooks'] = [progress_hook]
+    ydl_opts['postprocessors'] = get_postprocessors(mode)
 
     try:
         with YoutubeDL(ydl_opts) as ydl:
