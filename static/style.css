@@ -295,6 +295,22 @@ body::before {
     margin: 0 0 1rem 0;
 }
 
+.cookie-instruction {
+    margin: 0.5rem 0 !important;
+    padding-left: 1.5rem;
+    position: relative;
+}
+
+.cookie-instruction a {
+    color: var(--primary);
+    text-decoration: none;
+    font-weight: 500;
+}
+
+.cookie-instruction a:hover {
+    text-decoration: underline;
+}
+
 .cookies-content textarea {
     width: 100%;
     padding: 0.75rem;

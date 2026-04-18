@@ -17,26 +17,29 @@ download_state_lock = threading.Lock()
 def get_ydl_opts_base(skip_download=True):
     """Get base yt-dlp options with better YouTube support."""
     opts = {
-        'quiet': True,
+        'quiet': False,
         'skip_download': skip_download,
         'nocheckcertificate': True,
         'socket_timeout': 120 if skip_download else 300,
-        'retries': 5,
-        'no_warnings': True,
+        'retries': 10,
+        'fragment_retries': 10,
+        'no_warnings': False,
         'http_headers': {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
             'Accept-Language': 'en-US,en;q=0.9',
+            'Accept-Charset': 'utf-8, iso-8859-1;q=0.5',
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
         },
         'extractor_args': {
             'youtube': {
-                'player_client': ['web', 'android'],
+                'player_client': ['android', 'web'],
                 'player_skip': ['js', 'configs'],
             }
         },
-        'cookiesfrombrowser': ('chrome', 'firefox', 'chromium', 'opera', 'edge'),
+        'age_limit': 18,
     }
     
-    # Add stored cookies if available
+    # Add stored cookies if available - REQUIRED for bot detection bypass
     global stored_cookies
     if stored_cookies:
         opts['cookies'] = stored_cookies
@@ -358,7 +361,14 @@ def analyze_video():
         with YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(url, download=False)
     except Exception as e:
-        return jsonify({'error': f'Failed to analyze URL: {str(e)}', 'platform': 'Unknown'}), 400
+        error_str = str(e)
+        # Check if it's a bot detection error
+        if 'Sign in to confirm you\'re not a bot' in error_str or 'bot' in error_str.lower():
+            error_msg = ('YouTube requires authentication. Please provide YouTube cookies in the authentication section above. '
+                        'Visit the app and click "🔐 YouTube Authentication" to add your cookies.')
+        else:
+            error_msg = error_str
+        return jsonify({'error': f'Failed to analyze URL: {error_msg}', 'platform': 'Unknown'}), 400
 
     extractor_key = info.get('extractor_key', 'Unknown')
     platform = extractor_key.replace('_', ' ').title()
