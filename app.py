@@ -88,7 +88,7 @@ def _load_cookies_from_file():
                             cleaned_cookies.append(cleaned)
                         
                         stored_cookies = cleaned_cookies
-                        print(f"✓ Loaded and cleaned {len(stored_cookies)} YouTube cookies from {path}")
+                        print(f"[OK] Loaded and cleaned {len(stored_cookies)} YouTube cookies from {path}")
                         return
             except Exception as e:
                 print(f"Warning: Could not load cookies from {path}: {e}")
@@ -742,4 +742,12 @@ def download_file():
 
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000, debug=True)
+    debug_mode = os.environ.get('UV_DEBUG', '').lower() in ('1', 'true', 'yes')
+    port = int(os.environ.get('PORT', '5000'))
+    app.run(
+        host='0.0.0.0',
+        port=port,
+        debug=debug_mode,
+        use_reloader=debug_mode,
+        threaded=True,
+    )
