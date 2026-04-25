@@ -76,3 +76,5 @@ python app.py
 - The download feature uses `yt-dlp` to fetch the video file in the background, and you can cancel it before it finishes.
 - Some platforms may require additional support or network access.
 - For unsupported URLs, the app shows a friendly error.
+- If YouTube shows a bot-check error on Render, set a `YOUTUBE_COOKIES_JSON` environment variable with the contents of your exported cookie JSON. The app will convert it to the Netscape cookie format that `yt-dlp` expects.
+- Instagram and other supported sites may still show a success message even when the browser has not saved the file yet, so always check the browser download shelf or downloads page.

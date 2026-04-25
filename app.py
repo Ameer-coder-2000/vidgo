@@ -15,6 +15,136 @@ app = Flask(__name__, static_folder='static', template_folder='templates')
 download_state_lock = threading.Lock()
 
 
+stored_cookies = None
+stored_cookiefile = None
+cookies_lock = threading.Lock()
+
+
+def _clean_cookie_entries(cookies_data):
+    """Reduce browser-exported cookie records to the fields we care about."""
+    cleaned_cookies = []
+    for cookie in cookies_data:
+        if not isinstance(cookie, dict):
+            continue
+        cleaned = {
+            'domain': cookie.get('domain', '.youtube.com'),
+            'name': cookie.get('name', ''),
+            'value': cookie.get('value', ''),
+        }
+        if 'path' in cookie:
+            cleaned['path'] = cookie['path']
+        if 'secure' in cookie:
+            cleaned['secure'] = cookie['secure']
+        if 'httpOnly' in cookie:
+            cleaned['httpOnly'] = cookie['httpOnly']
+        if 'hostOnly' in cookie:
+            cleaned['hostOnly'] = cookie['hostOnly']
+        if 'expirationDate' in cookie:
+            cleaned['expirationDate'] = cookie['expirationDate']
+        if 'session' in cookie:
+            cleaned['session'] = cookie['session']
+        cleaned_cookies.append(cleaned)
+    if not cleaned_cookies:
+        raise ValueError('No valid cookies found in the supplied data.')
+    return cleaned_cookies
+
+
+def _cookie_entries_to_netscape(cookies_data):
+    """Convert browser-exported cookie JSON to Netscape cookie file format."""
+    lines = ['# Netscape HTTP Cookie File']
+    for cookie in cookies_data:
+        domain = str(cookie.get('domain') or '.youtube.com').strip()
+        host_only = bool(cookie.get('hostOnly'))
+        if not host_only and not domain.startswith('.'):
+            domain = f'.{domain}'
+        include_subdomains = 'FALSE' if host_only else 'TRUE'
+        path = str(cookie.get('path') or '/')
+        secure = 'TRUE' if cookie.get('secure') else 'FALSE'
+        expiration = cookie.get('expirationDate')
+        if cookie.get('session') or expiration in (None, '', 0):
+            expires = '0'
+        else:
+            try:
+                expires = str(int(float(expiration)))
+            except (TypeError, ValueError):
+                expires = '0'
+        name = str(cookie.get('name') or '')
+        value = str(cookie.get('value') or '')
+        lines.append('\t'.join([domain, include_subdomains, path, secure, expires, name, value]))
+    return '\n'.join(lines) + '\n'
+
+
+def _write_cookiefile(cookies_data):
+    """Write a temporary Netscape cookie file and return its path."""
+    cookie_text = _cookie_entries_to_netscape(cookies_data)
+    with tempfile.NamedTemporaryFile(
+        mode='w',
+        encoding='utf-8',
+        newline='\n',
+        prefix='uva_youtube_cookies_',
+        suffix='.txt',
+        delete=False,
+    ) as handle:
+        handle.write(cookie_text)
+        return handle.name
+
+
+def _store_cookies(cookies_data, source_label):
+    """Persist the current cookie set for yt-dlp and record the temp file path."""
+    global stored_cookies, stored_cookiefile
+    cleaned_cookies = _clean_cookie_entries(cookies_data)
+    cookiefile_path = _write_cookiefile(cleaned_cookies)
+
+    with cookies_lock:
+        previous_cookiefile = stored_cookiefile
+        stored_cookies = cleaned_cookies
+        stored_cookiefile = cookiefile_path
+
+    if previous_cookiefile and previous_cookiefile != cookiefile_path:
+        try:
+            os.remove(previous_cookiefile)
+        except OSError:
+            pass
+
+    print(f"[OK] Loaded {len(cleaned_cookies)} YouTube cookies from {source_label}")
+
+
+def _load_cookies_from_source():
+    """Try to load cookies from env vars or the local youtube_cookies.json file."""
+    sources = []
+
+    env_json = os.environ.get('YOUTUBE_COOKIES_JSON')
+    if env_json:
+        sources.append(('YOUTUBE_COOKIES_JSON', env_json, 'json-string'))
+
+    env_file = os.environ.get('YOUTUBE_COOKIES_FILE')
+    if env_file:
+        sources.append(('YOUTUBE_COOKIES_FILE', env_file, 'json-file'))
+
+    sources.extend([
+        ('youtube_cookies.json', 'youtube_cookies.json', 'json-file'),
+        ('__file__/youtube_cookies.json', os.path.join(os.path.dirname(__file__), 'youtube_cookies.json'), 'json-file'),
+    ])
+
+    for label, source, source_type in sources:
+        try:
+            if source_type == 'json-string':
+                cookies_data = json.loads(source)
+            else:
+                if not os.path.exists(source):
+                    continue
+                with open(source, 'r', encoding='utf-8') as handle:
+                    cookies_data = json.load(handle)
+
+            if isinstance(cookies_data, list):
+                _store_cookies(cookies_data, label)
+                return
+        except Exception as e:
+            print(f"Warning: Could not load cookies from {label}: {e}")
+
+    print("No YouTube cookie source found - Render deployments will need YOUTUBE_COOKIES_JSON or YOUTUBE_COOKIES_FILE")
+
+
 def get_ydl_opts_base(skip_download=True):
     """Get base yt-dlp options with better YouTube support."""
     opts = {
@@ -42,61 +172,20 @@ def get_ydl_opts_base(skip_download=True):
         'check_formats': False,  # Skip format checking to avoid extra requests
         'no_post_overwrites': True,
     }
-    
-    # Add stored cookies if available - REQUIRED for bot detection bypass
-    global stored_cookies
-    if stored_cookies:
-        opts['cookies'] = stored_cookies
-    
+
+    # Add a real cookie file path if available. yt-dlp expects cookiefile, not a raw
+    # in-memory cookie list.
+    with cookies_lock:
+        cookiefile_path = stored_cookiefile
+
+    if cookiefile_path and os.path.exists(cookiefile_path):
+        opts['cookiefile'] = cookiefile_path
+
     return opts
 
 
-# Global storage for cookies
-stored_cookies = None
-cookies_lock = threading.Lock()
-
-
-# Load cookies from file on startup
-def _load_cookies_from_file():
-    """Try to load cookies from youtube_cookies.json file."""
-    global stored_cookies
-    cookie_paths = [
-        'youtube_cookies.json',
-        os.path.join(os.path.dirname(__file__), 'youtube_cookies.json'),
-    ]
-    for path in cookie_paths:
-        if os.path.exists(path):
-            try:
-                with open(path, 'r') as f:
-                    cookies_data = json.load(f)
-                    if isinstance(cookies_data, list):
-                        # Clean cookies to only include fields yt-dlp needs
-                        cleaned_cookies = []
-                        for cookie in cookies_data:
-                            cleaned = {
-                                'domain': cookie.get('domain', '.youtube.com'),
-                                'name': cookie.get('name', ''),
-                                'value': cookie.get('value', ''),
-                            }
-                            # Add optional but useful fields
-                            if 'path' in cookie:
-                                cleaned['path'] = cookie['path']
-                            if 'secure' in cookie:
-                                cleaned['secure'] = cookie['secure']
-                            if 'httpOnly' in cookie:
-                                cleaned['httpOnly'] = cookie['httpOnly']
-                            cleaned_cookies.append(cleaned)
-                        
-                        stored_cookies = cleaned_cookies
-                        print(f"[OK] Loaded and cleaned {len(stored_cookies)} YouTube cookies from {path}")
-                        return
-            except Exception as e:
-                print(f"Warning: Could not load cookies from {path}: {e}")
-    print("No youtube_cookies.json file found - cookies authentication will need to be added manually")
-
-
-# Load cookies on app startup
-_load_cookies_from_file()
+# Load cookies on app startup.
+_load_cookies_from_source()
 
 
 # SaveFrom.net API Integration
@@ -511,7 +600,6 @@ def index():
 @app.route('/api/cookies', methods=['POST'])
 def set_cookies():
     """Store YouTube cookies for authentication."""
-    global stored_cookies
     data = request.get_json() or {}
     cookies = data.get('cookies')
     
@@ -524,28 +612,10 @@ def set_cookies():
         
         if not isinstance(cookies, list):
             return jsonify({'error': 'Cookies must be a JSON array'}), 400
-        
-        # Clean cookies to only include fields yt-dlp needs
-        cleaned_cookies = []
-        for cookie in cookies:
-            cleaned = {
-                'domain': cookie.get('domain', '.youtube.com'),
-                'name': cookie.get('name', ''),
-                'value': cookie.get('value', ''),
-            }
-            # Add optional but useful fields
-            if 'path' in cookie:
-                cleaned['path'] = cookie['path']
-            if 'secure' in cookie:
-                cleaned['secure'] = cookie['secure']
-            if 'httpOnly' in cookie:
-                cleaned['httpOnly'] = cookie['httpOnly']
-            cleaned_cookies.append(cleaned)
-        
-        with cookies_lock:
-            stored_cookies = cleaned_cookies
-        
-        return jsonify({'status': 'success', 'message': f'Successfully saved {len(cleaned_cookies)} cookies!'}), 200
+
+        _store_cookies(cookies, 'API upload')
+
+        return jsonify({'status': 'success', 'message': f'Successfully saved {len(cookies)} cookies!'}), 200
     except json.JSONDecodeError:
         return jsonify({'error': 'Invalid JSON format'}), 400
     except Exception as e:
@@ -555,11 +625,11 @@ def set_cookies():
 @app.route('/api/cookies', methods=['GET'])
 def get_cookies_status():
     """Check if cookies are configured."""
-    global stored_cookies
     with cookies_lock:
-        has_cookies = stored_cookies is not None
+        has_cookies = stored_cookiefile is not None and os.path.exists(stored_cookiefile)
         num_cookies = len(stored_cookies) if stored_cookies else 0
-    return jsonify({'has_cookies': has_cookies, 'cookie_count': num_cookies}), 200
+        cookiefile_path = stored_cookiefile
+    return jsonify({'has_cookies': has_cookies, 'cookie_count': num_cookies, 'cookiefile': cookiefile_path}), 200
 
 
 @app.route('/api/analyze', methods=['POST'])
